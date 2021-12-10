@@ -133,24 +133,26 @@ class MovieModel(Schema):
         'summary': {
             'type': 'string',
         },
-        'released': {
+        'poster_image': {
             'type': 'string',
-        },
-        'duration': {
-            'type': 'integer',
         },
         'rated': {
-            'type': 'string',
-        },
-        'tagline': {
-            'type': 'string',
-        },
-        'poster_image': {
             'type': 'string',
         },
         'my_rating': {
             'type': 'integer',
         }
+        # """
+        # 'released': {
+        #     'type': 'string',
+        # },
+        # 'duration': {
+        #     'type': 'integer',
+        # },
+        # 'tagline': {
+        #     'type': 'string',
+        # },
+        # """
     }
 
 
@@ -193,21 +195,22 @@ def serialize_genre(genre):
 
 def serialize_movie(movie, my_rating=None):
     return {
-        'id': movie['tmdbId'],
+        'id': movie['b_id'],
+        'url': movie['id'],
         'title': movie['title'],
-        'summary': movie['plot'],
-        'released': movie['released'],
-        'duration': movie['runtime'],
+        'summary': movie['description'],
         'rated': movie['imdbRating'],
-        'tagline': movie['plot'],
         'poster_image': movie['poster'],
         'my_rating': my_rating,
+        # 'released': movie['released'],
+        # 'duration': movie['runtime'],
+        # 'tagline': movie['plot'],
     }
 
 
 def serialize_person(person):
     return {
-        'id': person['tmdbId'],
+        'id': person['id'],
         'name': person['name'],
         'poster_image': person['poster'],
     }
@@ -260,7 +263,8 @@ class GenreList(Resource):
     })
     def get(self):
         def get_genres(tx):
-            return list(tx.run('MATCH (genre:Genre) SET genre.id=id(genre) RETURN genre'))
+            queryOld = 'MATCH (genre:Genre) SET genre.id=id(genre) RETURN genre'
+            return list(tx.run('MATCH (genre:Genre) RETURN genre'))
         db = get_db()
         result = db.write_transaction(get_genres)
         return [serialize_genre(record['genre']) for record in result]
@@ -301,25 +305,20 @@ class Movie(Resource):
         def get_movie(tx, user_id, id):
             return list(tx.run(
                 '''
-                MATCH (movie:Movie {tmdbId: $id})
-                OPTIONAL MATCH (movie)<-[my_rated:RATED]-(me:User {id: $user_id})
-                OPTIONAL MATCH (movie)<-[r:ACTED_IN]-(a:Person)
-                OPTIONAL MATCH (related:Movie)<--(a:Person) WHERE related <> movie
-                OPTIONAL MATCH (movie)-[:IN_GENRE]->(genre:Genre)
-                OPTIONAL MATCH (movie)<-[:DIRECTED]-(d:Person)
-                OPTIONAL MATCH (movie)<-[:PRODUCED]-(p:Person)
-                OPTIONAL MATCH (movie)<-[:WRITER_OF]-(w:Person)
+                MATCH (movie:Book)
+                WHERE id(movie)=toInteger($id)
+                OPTIONAL MATCH (movie)<-[my_rated:RATED]-(me:User {id: toInteger($user_id)})
+                OPTIONAL MATCH (movie)-[:HAS_AUTHOR]->(a:Author)
+                OPTIONAL MATCH (related_genre:Genre)<--(a:Author) WHERE related_genre <> movie
+                OPTIONAL MATCH (movie)-[:HAS_GENRE]->(genre:Genre)
                 WITH DISTINCT movie,
                 my_rated,
-                genre, d, p, w, a, r, related, count(related) AS countRelated
+                genre, a, related_genre, count(related_genre) AS countRelated
                 ORDER BY countRelated DESC
                 RETURN DISTINCT movie,
                 my_rated.rating AS my_rating,
-                collect(DISTINCT d) AS directors,
-                collect(DISTINCT p) AS producers,
-                collect(DISTINCT w) AS writers,
-                collect(DISTINCT{ name:a.name, id:a.tmdbId, poster_image:a.poster, role:r.role}) AS actors,
-                collect(DISTINCT related) AS related,
+                collect(DISTINCT a) AS writers,
+                collect(DISTINCT related_genre) AS related_genre,
                 collect(DISTINCT genre) AS genres
                 ''', {'user_id': user_id , 'id': id}
             ))
@@ -328,28 +327,20 @@ class Movie(Resource):
         result = db.read_transaction(get_movie, g.user['id'], id)
         for record in result:
             return {
-                'id': record['movie']['tmdbId'],
+                # to make serialize_movie and this return object consistent
+                'url': record['movie']['id'],
+                'id': record['movie']['b_id'],
                 'title': record['movie']['title'],
-                'summary': record['movie']['plot'],
-                'released': record['movie']['released'],
-                'duration': record['movie']['runtime'],
+                'summary': record['movie']['description'],
                 'rated': record['movie']['rated'],
-                'tagline': record['movie']['plot'],
                 'poster_image': record['movie']['poster'],
                 'my_rating': record['my_rating'],
                 'genres': [serialize_genre(genre) for genre in record['genres']],
-                'directors': [serialize_person(director)for director in record['directors']],
-                'producers': [serialize_person(producer) for producer in record['producers']],
                 'writers': [serialize_person(writer) for writer in record['writers']],
-                'actors': [
-                    {
-                        'id': actor['id'],
-                        'name': actor['name'],
-                        'role': actor['role'],
-                        'poster_image': actor['poster_image'],
-                    } for actor in record['actors']
-                ],
-                'related': [serialize_movie(related) for related in record['related']],
+                'related': [serialize_movie(related) for related in record['related_genre']],
+                # 'released': record['movie']['released'],
+                # 'duration': record['movie']['runtime'],
+                # 'tagline': record['movie']['plot'],
             }
         return {'message': 'movie not found'}, 404
 
@@ -373,7 +364,7 @@ class MovieList(Resource):
         def get_movies(tx):
             return list(tx.run(
                 '''
-                MATCH (movie:Movie) RETURN movie
+                MATCH (movie:Book) RETURN movie
                 '''
             ))
         db = get_db()
@@ -409,103 +400,15 @@ class MovieListByGenre(Resource):
         def get_movies_by_genre(tx, genre_id):
             return list(tx.run(
                 '''
-                MATCH (movie:Movie)-[:IN_GENRE]->(genre:Genre)
+                MATCH (movie:Book)-[:HAS_GENRE]->(genre:Genre)
                 WHERE toLower(genre.name) = toLower($genre_id)
                     // while transitioning to the sandbox data
-                    OR id(genre) = toInteger($genre_id)
+                    OR genre.id = toInteger($genre_id)
                 RETURN movie
                 ''', {'genre_id': genre_id}
             ))
         db = get_db()
         result = db.read_transaction(get_movies_by_genre, genre_id)
-        return [serialize_movie(record['movie']) for record in result]
-
-# Not sure this is useful anymore
-class MovieListByDateRange(Resource):
-    @swagger.doc({
-        'tags': ['movies'],
-        'summary': 'Find movie by year range',
-        'description': 'Returns a list of movies released between a range of years',
-        'parameters': [
-            {
-                'name': 'start',
-                'description': 'start year',
-                'in': 'path',
-                'type': 'integer',
-                'required': 'true'
-            },
-            {
-                'name': 'end',
-                'description': 'end year',
-                'in': 'path',
-                'type': 'integer',
-                'required': 'true'
-            }
-        ],
-        'responses': {
-            '200': {
-                'description': 'A list of movies released between the specified years',
-                'schema': {
-                    'type': 'array',
-                    'items': MovieModel,
-                }
-            }
-        }
-    })
-    def get(self, start, end):
-        try:
-            params = {'start': start, 'end': end}
-        except ValueError:
-            return {'description': 'invalid year format'}, 400
-
-        def get_movies_list_by_date_range(tx, params):
-            return list(tx.run(
-                '''
-                MATCH (movie:Movie)
-                WHERE movie.year > $start AND movie.year < $end
-                RETURN movie
-                ''', params
-            ))
-
-        db = get_db()
-        result = db.read_transaction(get_movies_list_by_date_range, params)
-        return [serialize_movie(record['movie']) for record in result]
-
-
-class MovieListByPersonActedIn(Resource):
-    @swagger.doc({
-        'tags': ['movies'],
-        'summary': 'Find movies by actor',
-        'description': 'Returns a list of movies that a person has acted in.',
-        'parameters': [
-            {
-                'name': 'person_id',
-                'description': 'person id',
-                'in': 'path',
-                'type': 'string',
-                'required': 'true'
-            },
-        ],
-        'responses': {
-            '200': {
-                'description': 'A list of movies the specified person has acted in',
-                'schema': {
-                    'type': 'array',
-                    'items': MovieModel,
-                }
-            }
-        }
-    })
-    def get(self, person_id):
-        def get_movies_by_acted_in(tx, person_id):
-            return list(tx.run(
-                '''
-                MATCH (actor:Actor {tmdbId: $person_id})-[:ACTED_IN]->(movie:Movie)
-                RETURN DISTINCT movie
-                ''', {'person_id': person_id}
-            ))
-        db = get_db()
-        result = db.read_transaction(get_movies_by_acted_in, person_id)
         return [serialize_movie(record['movie']) for record in result]
 
 
@@ -537,49 +440,12 @@ class MovieListByWrittenBy(Resource):
         def get_movies_list_written_by(tx, person_id):
             return list(tx.run(
                 '''
-                MATCH (actor:Writer {tmdbId: $person_id})-[:WRITER_OF]->(movie:Movie)
+                MATCH (actor:Author {id: toInteger($person_id)})<-[:HAS_AUTHOR]-(movie:Book)
                 RETURN DISTINCT movie
                 ''', {'person_id': person_id}
             ))
         db = get_db()
         result = db.read_transaction(get_movies_list_written_by, person_id)
-        return [serialize_movie(record['movie']) for record in result]
-
-
-class MovieListByDirectedBy(Resource):
-    @swagger.doc({
-        'tags': ['movies'],
-        'summary': 'Find movies by director',
-        'description': 'Returns a list of movies directed by a person',
-        'parameters': [
-            {
-                'name': 'person_id',
-                'description': 'person id',
-                'in': 'path',
-                'type': 'string',
-                'required': 'true'
-            },
-        ],
-        'responses': {
-            '200': {
-                'description': 'A list of movies the specified person has directed',
-                'schema': {
-                    'type': 'array',
-                    'items': MovieModel,
-                }
-            }
-        }
-    })
-    def get(self, person_id):
-        def get_mmovies_list_directed_by(tx, person_id):
-            return list(tx.run(
-                '''
-                MATCH (actor:Director {tmdbId: $person_id})-[:DIRECTED]->(movie:Movie)
-                RETURN DISTINCT movie
-                ''', {'person_id': person_id}
-            ))
-        db = get_db()
-        result = db.read_transaction(get_mmovies_list_directed_by, person_id)
         return [serialize_movie(record['movie']) for record in result]
 
 
@@ -612,7 +478,7 @@ class MovieListRatedByMe(Resource):
         def get_movies_rated_by_me(tx, user_id):
             return list(tx.run(
                 '''
-                MATCH (:User {id: $user_id})-[rated:RATED]->(movie:Movie)
+                MATCH (:User {id: $user_id})-[rated:RATED]->(movie:Book)
                 RETURN DISTINCT movie, rated.rating as my_rating
                 ''', {'user_id': user_id}
             ))
@@ -650,12 +516,12 @@ class MovieListRecommended(Resource):
         def get_movies_list_recommended(tx, user_id):
             return list(tx.run(
                 '''
-                MATCH (me:User {id: $user_id})-[my:RATED]->(m:Movie)
+                MATCH (me:User {id: $user_id})-[my:RATED]->(m:Book)
                 MATCH (other:User)-[their:RATED]->(m)
                 WHERE me <> other
                 AND abs(my.rating - their.rating) < 2
                 WITH other,m
-                MATCH (other)-[otherRating:RATED]->(movie:Movie)
+                MATCH (other)-[otherRating:RATED]->(movie:Book)
                 WHERE movie <> m 
                 WITH avg(otherRating.rating) AS avgRating, movie
                 RETURN movie
@@ -666,6 +532,132 @@ class MovieListRecommended(Resource):
         db = get_db()
         result = db.read_transaction(get_movies_list_recommended, g.user['id'])
         return [serialize_movie(record['movie']) for record in result]
+
+
+# class MovieListByDirectedBy(Resource):
+#     @swagger.doc({
+#         'tags': ['movies'],
+#         'summary': 'Find movies by director',
+#         'description': 'Returns a list of movies directed by a person',
+#         'parameters': [
+#             {
+#                 'name': 'person_id',
+#                 'description': 'person id',
+#                 'in': 'path',
+#                 'type': 'string',
+#                 'required': 'true'
+#             },
+#         ],
+#         'responses': {
+#             '200': {
+#                 'description': 'A list of movies the specified person has directed',
+#                 'schema': {
+#                     'type': 'array',
+#                     'items': MovieModel,
+#                 }
+#             }
+#         }
+#     })
+#     def get(self, person_id):
+#         def get_mmovies_list_directed_by(tx, person_id):
+#             return list(tx.run(
+#                 '''
+#                 MATCH (actor:Director {tmdbId: $person_id})-[:DIRECTED]->(movie:Movie)
+#                 RETURN DISTINCT movie
+#                 ''', {'person_id': person_id}
+#             ))
+#         db = get_db()
+#         result = db.read_transaction(get_mmovies_list_directed_by, person_id)
+#         return [serialize_movie(record['movie']) for record in result]
+
+# # Not sure this is useful anymore
+# class MovieListByDateRange(Resource):
+#     @swagger.doc({
+#         'tags': ['movies'],
+#         'summary': 'Find movie by year range',
+#         'description': 'Returns a list of movies released between a range of years',
+#         'parameters': [
+#             {
+#                 'name': 'start',
+#                 'description': 'start year',
+#                 'in': 'path',
+#                 'type': 'integer',
+#                 'required': 'true'
+#             },
+#             {
+#                 'name': 'end',
+#                 'description': 'end year',
+#                 'in': 'path',
+#                 'type': 'integer',
+#                 'required': 'true'
+#             }
+#         ],
+#         'responses': {
+#             '200': {
+#                 'description': 'A list of movies released between the specified years',
+#                 'schema': {
+#                     'type': 'array',
+#                     'items': MovieModel,
+#                 }
+#             }
+#         }
+#     })
+#     def get(self, start, end):
+#         try:
+#             params = {'start': start, 'end': end}
+#         except ValueError:
+#             return {'description': 'invalid year format'}, 400
+
+#         def get_movies_list_by_date_range(tx, params):
+#             return list(tx.run(
+#                 '''
+#                 MATCH (movie:Movie)
+#                 WHERE movie.year > $start AND movie.year < $end
+#                 RETURN movie
+#                 ''', params
+#             ))
+
+#         db = get_db()
+#         result = db.read_transaction(get_movies_list_by_date_range, params)
+#         return [serialize_movie(record['movie']) for record in result]
+
+
+# class MovieListByPersonActedIn(Resource):
+#     @swagger.doc({
+#         'tags': ['movies'],
+#         'summary': 'Find movies by actor',
+#         'description': 'Returns a list of movies that a person has acted in.',
+#         'parameters': [
+#             {
+#                 'name': 'person_id',
+#                 'description': 'person id',
+#                 'in': 'path',
+#                 'type': 'string',
+#                 'required': 'true'
+#             },
+#         ],
+#         'responses': {
+#             '200': {
+#                 'description': 'A list of movies the specified person has acted in',
+#                 'schema': {
+#                     'type': 'array',
+#                     'items': MovieModel,
+#                 }
+#             }
+#         }
+#     })
+#     def get(self, person_id):
+#         def get_movies_by_acted_in(tx, person_id):
+#             return list(tx.run(
+#                 '''
+#                 MATCH (actor:Actor {tmdbId: $person_id})-[:ACTED_IN]->(movie:Movie)
+#                 RETURN DISTINCT movie
+#                 ''', {'person_id': person_id}
+#             ))
+#         db = get_db()
+#         result = db.read_transaction(get_movies_by_acted_in, person_id)
+#         return [serialize_movie(record['movie']) for record in result]
+
 
 class Person(Resource):
     @swagger.doc({
@@ -695,18 +687,12 @@ class Person(Resource):
         def get_person_by_id(tx, user_id):
             return list(tx.run(
                 '''
-                MATCH (person:Person {tmdbId: $id})
-                OPTIONAL MATCH (person)-[:DIRECTED]->(d:Movie)
-                OPTIONAL MATCH (person)<-[:PRODUCED]->(p:Movie)
-                OPTIONAL MATCH (person)<-[:WRITER_OF]->(w:Movie)
-                OPTIONAL MATCH (person)<-[r:ACTED_IN]->(a:Movie)
-                OPTIONAL MATCH (person)-->(movies)<-[relatedRole:ACTED_IN]-(relatedPerson)
+                MATCH (person:Author {id: toInteger($id)})
+                OPTIONAL MATCH (person)<-[:HAS_AUTHOR]-(w:Book)
+                OPTIONAL MATCH (person)<--(b:Book)-[:HAS_AUTHOR]->(relatedPerson:Author)
                 RETURN DISTINCT person,
-                collect(DISTINCT { name:d.title, id:d.tmdbId, poster_image:d.poster}) AS directed,
-                collect(DISTINCT { name:p.title, id:p.tmdbId, poster_image:p.poster}) AS produced,
-                collect(DISTINCT { name:w.title, id:w.tmdbId, poster_image:w.poster}) AS wrote,
-                collect(DISTINCT{ name:a.title, id:a.tmdbId, poster_image:a.poster, role:r.role}) AS actedIn,
-                collect(DISTINCT{ name:relatedPerson.name, id:relatedPerson.tmdbId, poster_image:relatedPerson.poster, role:relatedRole.role}) AS related
+                collect(DISTINCT{ name:w.title, id:w.id, poster_image:w.poster}) AS wrote,
+                collect(DISTINCT{ name:relatedPerson.name, id:relatedPerson.id, poster_image:relatedPerson.poster}) AS related
                 ''', {'id': user_id}
             ))
         db = get_db()
@@ -716,20 +702,6 @@ class Person(Resource):
                 'id': record['person']['id'],
                 'name': record['person']['name'],
                 'poster_image': record['person']['poster'],
-                'directed': [
-                    {
-                        'id': movie['id'],
-                        'name': movie['name'],
-                        'poster_image': movie['poster_image'],
-                    } for movie in record['directed']
-                ],
-                'produced': [
-                    {
-                        'id': movie['id'],
-                        'name': movie['name'],
-                        'poster_image': movie['poster_image'],
-                    } for movie in record['produced']
-                ],
                 'wrote': [
                     {
                         'id': movie['id'],
@@ -737,20 +709,12 @@ class Person(Resource):
                         'poster_image': movie['poster_image'],
                     } for movie in record['wrote']
                 ],
-                'actedIn': [
-                    {
-                        'id': movie['id'],
-                        'name': movie['name'],
-                        'poster_image': movie['poster_image'],
-                        'role': movie['role'],
-                    } for movie in record['actedIn']
-                ],
                 'related': [
                     {
                         'id': person['id'],
                         'name': person['name'],
                         'poster_image': person['poster_image'],
-                        'role': person['role'],
+                        'role': 'Co-author',
                     } for person in record['related']
                 ],
             }
@@ -776,7 +740,7 @@ class PersonList(Resource):
         def get_persons_list(tx):
             return list(tx.run(
                 '''
-                MATCH (person:Person) RETURN person
+                MATCH (person:Author) SET person.id=id(person) RETURN person
                 '''
             ))
         db = get_db()
@@ -784,52 +748,52 @@ class PersonList(Resource):
         return [serialize_person(record['person']) for record in results]
 
 
-class PersonBacon(Resource):
-    @swagger.doc({
-        'tags': ['people'],
-        'summary': 'Find all Bacon paths',
-        'description': 'Returns all bacon paths from person 1 to person 2',
-        'parameters': [
-            {
-                'name': 'name1',
-                'description': 'Name of the origin user',
-                'in': 'query',
-                'type': 'string',
-                'required': True,
-            },
-            {
-                'name': 'name2',
-                'description': 'Name of the target user',
-                'in': 'query',
-                'type': 'string',
-                'required': True,
-            }
-        ],
-        'responses': {
-            '200': {
-                'description': 'A list of people',
-                'schema': {
-                    'type': 'array',
-                    'items': PersonModel,
-                }
-            }
-        }
-    })
-    def get(self):
-        name1 = request.args['name1']
-        name2 = request.args['name2']
-        def get_bacon(tx, name1, name2):
-            return list(tx.run(
-                '''
-                MATCH p = shortestPath( (p1:Person {name: $name1})-[:ACTED_IN*]-(target:Person {name: $name2}) )
-                WITH [n IN nodes(p) WHERE n:Person | n] as bacon
-                UNWIND(bacon) AS person
-                RETURN DISTINCT person
-                ''', {'name1': name1, 'name2': name2}
-            ))
-        db = get_db()
-        results = db.read_transaction(get_bacon, name1, name2)
-        return [serialize_person(record['person']) for record in results]
+# class PersonBacon(Resource):
+#     @swagger.doc({
+#         'tags': ['people'],
+#         'summary': 'Find all Bacon paths',
+#         'description': 'Returns all bacon paths from person 1 to person 2',
+#         'parameters': [
+#             {
+#                 'name': 'name1',
+#                 'description': 'Name of the origin user',
+#                 'in': 'query',
+#                 'type': 'string',
+#                 'required': True,
+#             },
+#             {
+#                 'name': 'name2',
+#                 'description': 'Name of the target user',
+#                 'in': 'query',
+#                 'type': 'string',
+#                 'required': True,
+#             }
+#         ],
+#         'responses': {
+#             '200': {
+#                 'description': 'A list of people',
+#                 'schema': {
+#                     'type': 'array',
+#                     'items': PersonModel,
+#                 }
+#             }
+#         }
+#     })
+#     def get(self):
+#         name1 = request.args['name1']
+#         name2 = request.args['name2']
+#         def get_bacon(tx, name1, name2):
+#             return list(tx.run(
+#                 '''
+#                 MATCH p = shortestPath( (p1:Person {name: $name1})-[:ACTED_IN*]-(target:Person {name: $name2}) )
+#                 WITH [n IN nodes(p) WHERE n:Person | n] as bacon
+#                 UNWIND(bacon) AS person
+#                 RETURN DISTINCT person
+#                 ''', {'name1': name1, 'name2': name2}
+#             ))
+#         db = get_db()
+#         results = db.read_transaction(get_bacon, name1, name2)
+#         return [serialize_person(record['person']) for record in results]
 
 
 class Register(Resource):
@@ -1007,7 +971,7 @@ class RateMovie(Resource):
             },
             {
                 'name': 'id',
-                'description': 'movie tmdbId',
+                'description': 'movie b_id',
                 'in': 'path',
                 'type': 'string',
             },
@@ -1043,7 +1007,7 @@ class RateMovie(Resource):
         def rate_movie(tx, user_id, movie_id, rating):
             return tx.run(
                 '''
-                MATCH (u:User {id: $user_id}),(m:Movie {tmdbId: $movie_id})
+                MATCH (u:User {id: $user_id}),(m:Book {b_id: $movie_id})
                 MERGE (u)-[r:RATED]->(m)
                 SET r.rating = $rating
                 RETURN m
@@ -1068,7 +1032,7 @@ class RateMovie(Resource):
             },
             {
                 'name': 'id',
-                'description': 'movie tmdbId',
+                'description': 'movie b_id',
                 'in': 'path',
                 'type': 'string',
             },
@@ -1087,7 +1051,7 @@ class RateMovie(Resource):
         def delete_rating(tx, user_id, movie_id):
             return tx.run(
                 '''
-                MATCH (u:User {id: $user_id})-[r:RATED]->(m:Movie {tmdbId: $movie_id}) DELETE r
+                MATCH (u:User {id: $user_id})-[r:RATED]->(m:Movie {b_id: $movie_id}) DELETE r
                 ''', {'movie_id': movie_id, 'user_id': user_id}
             )
         db = get_db()
@@ -1101,15 +1065,15 @@ api.add_resource(Movie, '/api/v0/movies/<string:id>')
 api.add_resource(RateMovie, '/api/v0/movies/<string:id>/rate')
 api.add_resource(MovieList, '/api/v0/movies')
 api.add_resource(MovieListByGenre, '/api/v0/movies/genre/<string:genre_id>/')
-api.add_resource(MovieListByDateRange, '/api/v0/movies/daterange/<int:start>/<int:end>')
-api.add_resource(MovieListByPersonActedIn, '/api/v0/movies/acted_in_by/<string:person_id>')
 api.add_resource(MovieListByWrittenBy, '/api/v0/movies/written_by/<string:person_id>')
-api.add_resource(MovieListByDirectedBy, '/api/v0/movies/directed_by/<string:person_id>')
 api.add_resource(MovieListRatedByMe, '/api/v0/movies/rated')
 api.add_resource(MovieListRecommended, '/api/v0/movies/recommended')
+#api.add_resource(MovieListByDirectedBy, '/api/v0/movies/directed_by/<string:person_id>')
+#api.add_resource(MovieListByDateRange, '/api/v0/movies/daterange/<int:start>/<int:end>')
+#api.add_resource(MovieListByPersonActedIn, '/api/v0/movies/acted_in_by/<string:person_id>')
 api.add_resource(Person, '/api/v0/people/<string:id>')
 api.add_resource(PersonList, '/api/v0/people')
-api.add_resource(PersonBacon, '/api/v0/people/bacon')
+#api.add_resource(PersonBacon, '/api/v0/people/bacon')
 api.add_resource(Register, '/api/v0/register')
 api.add_resource(Login, '/api/v0/login')
 api.add_resource(UserMe, '/api/v0/users/me')
