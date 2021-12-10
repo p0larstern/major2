@@ -14,8 +14,8 @@ export default class Routes extends React.Component {
     return (
       <App>
         <Route exact path="/" component={Home}/>
-        <Route path="/movie/:id" component={Movie}/>
-        <Route path="/person/:id" component={Person}/>
+        <Route path="/book/:id" component={Movie}/>
+        <Route path="/author/:id" component={Person}/>
         <Route path="/login" component={Login}/>
         <Route path="/signup" component={Signup}/>
         <Route path="/signup-status" component={SignupStatus}/>

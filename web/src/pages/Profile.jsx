@@ -60,11 +60,11 @@ class Profile extends React.Component {
                   {ratedMovies.map((movie, i, array) => {
                     return (
                       <div key={movie.id}>
-                        <Link to={`/movie/${movie.id}`}>
-                          <img src={movie.posterImage} className="nt-profile-movie-cover" alt=""/>
+                        <Link to={`/book/${movie.id}`}>
+                          <img src={movie.posterImage} className="nt-profile-movie-cover" alt="Book Image"/>
                         </Link>
                         <div className="nt-profile-movie-title">
-                          <Link to={`/movie/${movie.id}`}>
+                          <Link to={`/book/${movie.id}`}>
                             {movie.title}
                           </Link>
                         </div>
@@ -97,11 +97,11 @@ class Profile extends React.Component {
                     {recommendedMovies.map(m => {
                       return (
                         <div key={m.id}>
-                          <Link to={`/movie/${m.id}`}>
+                          <Link to={`/book/${m.id}`}>
                             <img src={m.posterImage} alt="" />
                           </Link>
                           <div className="nt-carousel-movie-title">
-                            <Link to={`/movie/${m.id}`}>{m.title}</Link>
+                            <Link to={`/book/${m.id}`}>{m.title}</Link>
                           </div>
                         </div>
                       );

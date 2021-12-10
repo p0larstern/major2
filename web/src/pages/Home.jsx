@@ -18,7 +18,7 @@ class Home extends React.Component {
 
   componentWillMount() {
     this.props.getFeaturedMovies();
-    this.props.getMoviesByGenres(['Adventure', 'Drama']);
+    this.props.getMoviesByGenres(['read-for-school', 'fiction']);
   }
 
   render() {
@@ -31,8 +31,8 @@ class Home extends React.Component {
             {this.renderFeatured()}
           </div>
           <div className="large-12 columns">
-            {this.renderByGenre('Adventure')}
-            {this.renderByGenre('Drama')}
+            {this.renderByGenre('read-for-school')}
+            {this.renderByGenre('fiction')}
           </div>
         </div>
       </div>
@@ -49,8 +49,8 @@ class Home extends React.Component {
           { _.compact(movies.featured).map(f => {
             return (
               <li key={f.id}>
-                <Link to={`/movie/${f.id}`}>
-                  <img src={f.posterImage} alt="" />
+                <Link to={`/book/${f.id}`}>
+                  <img src={f.posterImage} alt="Book Image" />
                 </Link>
               </li>
             );
@@ -78,11 +78,11 @@ class Home extends React.Component {
             { moviesByGenre.map(m => {
               return (
                 <div key={m.id}>
-                  <Link to={`/movie/${m.id}`}>
-                    <img src={m.posterImage} alt="" />
+                  <Link to={`/book/${m.id}`}>
+                    <img src={m.posterImage} alt="Book Image" />
                   </Link>
                   <div className="nt-carousel-movie-title">
-                    <Link to={`/movie/${m.id}`}>{m.title}</Link>
+                    <Link to={`/book/${m.id}`}>{m.title}</Link>
                   </div>
                 </div>
               );

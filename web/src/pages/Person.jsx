@@ -42,7 +42,7 @@ class Person extends React.Component {
               <div className="small-12 medium-3 columns nt-person-aside">
                 <img className="nt-person-poster"
                   src={detail.posterImage}
-                  alt="" />
+                  alt="Author Image" />
               </div>
               <div className="small-12 medium-9 columns nt-person-main">
                 <div>
@@ -64,9 +64,6 @@ class Person extends React.Component {
                 </div>
               </div>
             </div>
-            {this.renderRelatedMovies('Acted In', detail.actedIn)}
-            {this.renderRelatedMovies('Directed', detail.directed)}
-            {this.renderRelatedMovies('Produced', detail.produced)}
             {this.renderRelatedMovies('Wrote', detail.wrote)}
           </div>
           : null
@@ -82,10 +79,10 @@ class Person extends React.Component {
           actors.map(a => {
             return (
               <div key={a.id}>
-                <Link to={`/person/${a.id}`}>
-                  <img src={a.posterImage} alt="" />
+                <Link to={`/author/${a.id}`}>
+                  <img src={a.posterImage} alt="Author Icon" />
                 </Link>
-                <div className="nt-carousel-actor-name"><Link to={`/person/${a.id}`}>{a.name}</Link></div>
+                <div className="nt-carousel-actor-name"><Link to={`/author/${a.id}`}>{a.name}</Link></div>
                 <div className="nt-carousel-actor-role">{a.role}</div>
               </div>
             );
@@ -116,10 +113,10 @@ class Person extends React.Component {
                 movies.map(m => {
                   return (
                     <div key={m.id}>
-                      <Link to={`/movie/${m.id}`}>
-                        <img src={m.posterImage} alt="" />
+                      <Link to={`/book/${m.id}`}>
+                        <img src={m.posterImage} alt="Book Image" />
                       </Link>
-                      <div className="nt-carousel-movie-title"><Link to={`/movie/${m.id}`}>{m.name}</Link></div>
+                      <div className="nt-carousel-movie-title"><Link to={`/book/${m.id}`}>{m.name}</Link></div>
                       {m.role ?
                         <div className="nt-carousel-movie-role">{m.role}</div>
                         : null

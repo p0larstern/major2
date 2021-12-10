@@ -45,15 +45,7 @@ class Movie extends React.Component {
               <div className="small-12 medium-4 columns nt-movie-aside">
                 <img className="nt-movie-poster"
                      src={movie.posterImage}
-                     alt="" />
-                <div className="nt-box">
-                  <div className="nt-box-title">
-                    Storyline
-                  </div>
-                  <p className="nt-box-row">
-                    <span>{movie.tagline}</span>
-                  </p>
-                </div>
+                     alt="Book Poster" />
               </div>
               <div className="small-12 medium-8 columns nt-movie-main">
                 <div>
@@ -72,29 +64,37 @@ class Movie extends React.Component {
                   }
                   <div className="nt-box">
                     <div className="nt-box-title">
-                      Movie Details
+                      Book Details
                     </div>
-                    <p className="nt-box-row">
-                      <strong>Year: </strong><span>{movie.released}</span>
-                    </p>
-                    <p className="nt-box-row">
-                      <strong>Duration: </strong><span>{`${movie.duration} mins`}</span>
-                    </p>
                     <p className="nt-box-row">
                       <strong>Genres: </strong>
                       <span>{this.renderGenre(movie.genres)}</span>
                     </p>
                     <p className="nt-box-row">
-                      <strong>Directed By: </strong>
-                      <span>{this.renderPeople(movie.directors)}</span>
+                      <strong>Written By: </strong>
+                      <span>{this.renderPeople(movie.writers)}</span>
                     </p>
+                    {/* <p className="nt-box-row">
+                      <strong>Year: </strong><span>{movie.released}</span>
+                    </p> */}
+                    {/* <p className="nt-box-row">
+                      <strong>Duration: </strong><span>{`${movie.duration} mins`}</span>
+                    </p> */}
                   </div>
                   <div className="nt-box">
+                    <div className="nt-box-title">
+                      Storyline
+                    </div>
+                    <p className="nt-box-row">
+                      <span>{movie.summary}</span>
+                    </p>
+                  </div>
+                  {/* <div className="nt-box">
                     <div className="nt-box-title">
                       Cast
                     </div>
                     <div>{this.renderCast(movie.actors)}</div>
-                  </div>
+                  </div> */}
                 </div>
               </div>
               <div className="small-12 columns">
@@ -121,29 +121,6 @@ class Movie extends React.Component {
       .join(', ');
   }
 
-  renderCast(actors) {
-    if (_.isEmpty(actors)) {
-      return null;
-    }
-
-    return (
-      <Carousel>
-        {
-          actors.map(a => {
-            return (
-              <div key={a.id}>
-                <Link to={`/person/${a.id}`}>
-                  <img src={a.posterImage} alt="" />
-                </Link>
-                <div className="nt-carousel-actor-name"><Link to={`/person/${a.id}`}>{a.name}</Link></div>
-                <div className="nt-carousel-actor-role">{a.role}</div>
-              </div>
-            );
-          })
-        }
-      </Carousel>);
-  }
-
   renderRelatedMovies(movies) {
     if (_.isEmpty(movies)) {
       return null;
@@ -155,11 +132,11 @@ class Movie extends React.Component {
           movies.map(m => {
             return (
               <div key={m.id}>
-                <Link to={`/movie/${m.id}`}>
+                <Link to={`/book/${m.id}`}>
                   <img src={m.posterImage} alt="" />
                 </Link>
                 <div className="nt-carousel-movie-title">
-                  <Link to={`/movie/${m.id}`}>{m.title}</Link>
+                  <Link to={`/book/${m.id}`}>{m.title}</Link>
                 </div>
               </div>
             );
@@ -172,7 +149,7 @@ class Movie extends React.Component {
     return people.map((p, i) => {
       return (
         <span key={p.id}>
-        <Link to={`/person/${p.id}`}>{p.name}</Link>
+        <Link to={`/author/${p.id}`}>{p.name}</Link>
           {i < people.length - 1 ? <span>, </span> : null}
       </span>);
     });
@@ -186,6 +163,29 @@ class Movie extends React.Component {
       </span>);
     });
   }
+
+  // renderCast(actors) {
+  //   if (_.isEmpty(actors)) {
+  //     return null;
+  //   }
+
+  //   return (
+  //     <Carousel>
+  //       {
+  //         actors.map(a => {
+  //           return (
+  //             <div key={a.id}>
+  //               <Link to={`/person/${a.id}`}>
+  //                 <img src={a.posterImage} alt="" />
+  //               </Link>
+  //               <div className="nt-carousel-actor-name"><Link to={`/person/${a.id}`}>{a.name}</Link></div>
+  //               <div className="nt-carousel-actor-role">{a.role}</div>
+  //             </div>
+  //           );
+  //         })
+  //       }
+  //     </Carousel>);
+  // }
 }
 Movie.displayName = 'Movie';
 
